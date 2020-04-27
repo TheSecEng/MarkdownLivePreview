@@ -228,7 +228,7 @@ class MarkdownLivePreviewListener(sublime_plugin.EventListener):
             resources,
         )
         global preview_view
-        mdpopups.update_html_sheet(preview_view, html_content, md=True)
+        mdpopups.update_html_sheet(preview_view, html_content, md=False)
 
 
 def get_settings():

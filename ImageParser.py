@@ -10,10 +10,23 @@ import bs4
 __all__ = ("imageparser",)
 
 
+RE_BAD_ENTITIES = re.compile(r'(&(?!amp;|lt;|gt;|nbsp;)(?:\w+;|#\d+;))')
+
 # FIXME: how do I choose how many workers I want? Does thread pool reuse threads or
 #        does it stupidly throw them out? (we could implement something of our own)
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=5)
 
+def _remove_entities(text):
+    """Remove unsupported HTML entities."""
+
+    import html.parser
+    html = html.parser.HTMLParser()
+
+    def repl(m):
+        """Replace entities except &, <, >, and `nbsp`."""
+        return html.unescape(m.group(1))
+
+    return RE_BAD_ENTITIES.sub(repl, text)
 
 def imageparser(html, basepath, re_render, resources):
     soup = bs4.BeautifulSoup(html, "html.parser")
@@ -38,12 +51,15 @@ def imageparser(html, basepath, re_render, resources):
 
         img_element["src"] = base64
 
-    return re.sub(
-        "(<!--.*?-->)",
-        "",
-        "{}".format(soup).replace("<br/>", "<br />"),
-        flags=re.DOTALL,
-    )
+    return _remove_entities(re.sub(
+            "(<!--.*?-->)",
+            "",
+            "{}".format(soup)
+            .replace("<br/>", "<br />")
+            .replace("</br>", "<br>")
+            .replace("<hr/>", "<hr />"),
+            flags=re.DOTALL,
+        ))
 
 
 images_cache = {}
