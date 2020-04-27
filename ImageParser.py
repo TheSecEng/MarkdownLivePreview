@@ -83,6 +83,9 @@ def get_base64_image(path, re_render, resources):
             images_loading.append(path)
         return resources["base64_loading_image"]
 
+    if not os.path.isfile(path):
+        return resources["base64_invalid_image"]
+
     with open(path, "rb") as fhandle:
         image_content = fhandle.read()
 

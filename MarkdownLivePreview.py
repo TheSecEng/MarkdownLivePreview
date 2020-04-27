@@ -30,7 +30,10 @@ def plugin_loaded():
     resources["base64_loading_image"] = parse_image_resource(
         get_resource("loading.base64")
     )
-    resources["stylesheet"] = get_resource("stylesheet.css")
+    resources["base64_invalid_image"] = parse_image_resource(
+        get_resource("invalid.base64")
+    )
+    # resources["stylesheet"] = get_resource("stylesheet.css")
     # FIXME: how could we make this setting update without restarting sublime text
     #        and not loading it every update as well
     DELAY = get_settings().get(SETTING_DELAY_BETWEEN_UPDATES)
