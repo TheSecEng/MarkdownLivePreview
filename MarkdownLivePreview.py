@@ -25,7 +25,7 @@ resources = {}
 
 
 def plugin_loaded():
-    global DELAY
+    global DELAY, SETTINGS
     resources["base64_404_image"] = parse_image_resource(get_resource("404.base64"))
     resources["base64_loading_image"] = parse_image_resource(
         get_resource("loading.base64")
@@ -33,10 +33,22 @@ def plugin_loaded():
     resources["base64_invalid_image"] = parse_image_resource(
         get_resource("invalid.base64")
     )
-    # resources["stylesheet"] = get_resource("stylesheet.css")
-    # FIXME: how could we make this setting update without restarting sublime text
-    #        and not loading it every update as well
-    DELAY = get_settings().get(SETTING_DELAY_BETWEEN_UPDATES)
+    SETTINGS = get_settings()
+    DELAY = SETTINGS.get(SETTING_DELAY_BETWEEN_UPDATES, 100)
+    SETTINGS.add_on_change("key_changes", update_delay)
+
+
+def plugin_unloaded():
+    global SETTINGS
+    SETTINGS.clear_on_change("key_changes")
+
+
+def update_delay():
+    try:
+        global DELAY
+        DELAY = int(SETTINGS.get(SETTING_DELAY_BETWEEN_UPDATES))
+    except Exception as ex:
+        print(ex)
 
 
 class MdlpInsertCommand(sublime_plugin.TextCommand):
@@ -44,12 +56,19 @@ class MdlpInsertCommand(sublime_plugin.TextCommand):
         self.view.insert(edit, point, string)
 
 
+class MdlpEraseCommand(sublime_plugin.TextCommand):
+    def run(self, edit):
+        region = sublime.Region(0, self.view.size())
+        self.view.erase(edit, region)
+
+
 class OpenMarkdownPreviewCommand(sublime_plugin.TextCommand):
     def run(self, edit):
         global preview_view
-        """ If the file is saved exists on disk, we close it, and reopen it in a new
-        window. Otherwise, we copy the content, erase it all (to close the file without
-        a dialog) and re-insert it into a new view into a new window """
+        """ Description: If the file is saved exists on disk, we close it, 
+        - and reopen it in a new window. Otherwise, we copy the content, 
+        - erase it all (to close the file without a dialog) 
+        - and re-insert it into a new view into a new window """
 
         original_view = self.view
         original_window_id = original_view.window().id()
@@ -125,7 +144,7 @@ class MarkdownLivePreviewListener(sublime_plugin.EventListener):
         if self.file_name is None:
             total_region = sublime.Region(0, markdown_view.size())
             self.content = markdown_view.substr(total_region)
-            markdown_view.erase(edit, total_region)
+            markdown_view.run_command("mdlp_erase")
         else:
             self.content = None
 
@@ -228,10 +247,3 @@ def get_resource(resource):
 def parse_image_resource(text):
     base64_image = text.splitlines()
     return base64_image
-
-
-# try to reload the resources if we save this file
-try:
-    plugin_loaded()
-except OSError:
-    pass
