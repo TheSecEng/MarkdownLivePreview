@@ -216,8 +216,10 @@ class MarkdownLivePreviewListener(sublime_plugin.EventListener):
         self.last_update = time.time()
 
         total_region = sublime.Region(0, markdown_view.size())
+        markdown_content = self.render_checkbox(markdown_view.substr(total_region))
+
         html_content = mdpopups.md2html(
-            markdown_view, markdown_view.substr(total_region)
+            markdown_view, markdown_content
         )
 
         basepath = os.path.dirname(markdown_view.file_name())
@@ -229,6 +231,11 @@ class MarkdownLivePreviewListener(sublime_plugin.EventListener):
         )
         global preview_view
         mdpopups.update_html_sheet(preview_view, html_content, md=False)
+
+    def render_checkbox(self, content: str):
+        if SETTINGS.get("render_checkboxes", True):
+            return content.replace("- [ ]", "&nbsp;&#9744;").replace("- [x]", "&nbsp;&#9745;")
+        return content
 
 
 def get_settings():
