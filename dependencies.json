@@ -1,7 +1,9 @@
 {
     "*": {
         "*": [
-            "bs4"
+            "bs4",
+            "mdpopups",
+            "requests"
         ]
     }
 }
