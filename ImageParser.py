@@ -1,8 +1,7 @@
 import base64
 import concurrent.futures
-import io
 import os.path
-import struct
+import re
 import urllib.request
 from functools import partial
 
@@ -39,7 +38,12 @@ def imageparser(html, basepath, re_render, resources):
 
         img_element["src"] = base64
 
-    return "{}".format(soup).replace("<br/>", "<br />")
+    return re.sub(
+        "(<!--.*?-->)",
+        "",
+        "{}".format(soup).replace("<br/>", "<br />"),
+        flags=re.DOTALL,
+    )
 
 
 images_cache = {}
