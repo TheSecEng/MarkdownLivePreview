@@ -7,16 +7,16 @@ original_window: the regular window
 preview_window: the window with the markdown file and the preview
 """
 
-import base64
+
 import os.path
 import time
 from functools import partial
 
-import bs4
-
 import mdpopups
 import sublime
 import sublime_plugin
+
+from .ImageParser import imageparser
 
 MARKDOWN_VIEW_INFOS = "markdown_view_infos"
 SETTING_DELAY_BETWEEN_UPDATES = "delay_between_updates"
@@ -102,11 +102,6 @@ class OpenMarkdownPreviewCommand(sublime_plugin.TextCommand):
 
 
 class MarkdownLivePreviewListener(sublime_plugin.EventListener):
-
-    phantom_sets = {
-        # markdown_view.id(): phantom set
-    }
-
     # we schedule an update for every key stroke, with a delay of DELAY
     # then, we update only if now() - last_update > DELAY
     last_update = 0
@@ -171,17 +166,15 @@ class MarkdownLivePreviewListener(sublime_plugin.EventListener):
             )
 
             original_view.set_syntax_file(markdown_view.settings().get("syntax"))
-            global preview_view
-            preview_view = None
+        global preview_view
+        preview_view = None
 
     # here, views are NOT treated independently, which is theoretically wrong
     # but in practice, you can only edit one markdown file at a time, so it doesn't really
     # matter.
     # @min_time_between_call(.5)
     def on_modified_async(self, markdown_view):
-
-        infos = markdown_view.settings().get(MARKDOWN_VIEW_INFOS)
-        if not infos:
+        if not markdown_view.settings().get(MARKDOWN_VIEW_INFOS):
             return
 
         # we schedule an update, which won't run if an
@@ -201,44 +194,19 @@ class MarkdownLivePreviewListener(sublime_plugin.EventListener):
         self.last_update = time.time()
 
         total_region = sublime.Region(0, markdown_view.size())
-        markdown = markdown_view.substr(total_region)
-        html_content = mdpopups.md2html(markdown_view, markdown)
-        parser = ImgParser(html_content)
-        parser.ImageToBase64()
-        # print(html_content)
-        if get_settings().get("convert_url_to_base64", True):
-            parser.ImageToBase64()
+        html_content = mdpopups.md2html(
+            markdown_view, markdown_view.substr(total_region)
+        )
+
+        basepath = os.path.dirname(markdown_view.file_name())
+        html_content = imageparser(
+            html_content,
+            basepath,
+            partial(self._update_preview, markdown_view),
+            resources,
+        )
         global preview_view
-        mdpopups.update_html_sheet(preview_view, parser.Prettify(), md=True)
-
-
-class ImgParser:
-    def __init__(self, src: str):
-        self.soup = bs4.BeautifulSoup(src)
-
-    def ImageToBase64(self):
-        images = self.soup.findAll("img")
-        for image in images:
-            image["src"] = self._image_to_base64(image["src"])
-
-    def Prettify(self):
-        return self.soup.prettify()
-
-    def _image_to_base64(self, src: str):
-        try:
-            import requests
-
-            response = requests.get(src)
-            uri = (
-                "data:"
-                + response.headers["Content-Type"]
-                + ";"
-                + "base64,"
-                + base64.b64encode(response.content).decode("utf-8")
-            )
-        except Exception as ex:
-            return src
-        return uri
+        mdpopups.update_html_sheet(preview_view, html_content, md=True)
 
 
 def get_settings():
@@ -255,8 +223,8 @@ def get_resource(resource):
 
 
 def parse_image_resource(text):
-    width, height, base64_image = text.splitlines()
-    return base64_image, (int(width), int(height))
+    base64_image = text.splitlines()
+    return base64_image
 
 
 # try to reload the resources if we save this file

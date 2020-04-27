@@ -5,7 +5,7 @@ this is a test, hello world
 This is the first image from the local file system (absolute path, sorry, it's not going
 to work on your system unless your username is math2001):
 
-![The sublime text logo!](file:///home/math2001/.config/sublime-text-3/Packages/MarkdownLivePreview/live-testing/sublime_text.png)
+![The sublime text logo!](sublime_text.png)
 
 This is the first image from the local file system, *relative* path!
 
