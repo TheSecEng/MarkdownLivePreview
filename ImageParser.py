@@ -41,7 +41,10 @@ def imageparser(html, basepath, re_render, resources):
     return re.sub(
         "(<!--.*?-->)",
         "",
-        "{}".format(soup).replace("<br/>", "<br />"),
+        "{}".format(soup)
+        .replace("<br/>", "<br />")
+        .replace("</br>", "<br>")
+        .replace("<hr/>", "<hr />"),
         flags=re.DOTALL,
     )
 
