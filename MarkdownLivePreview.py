@@ -18,7 +18,7 @@ import sublime_plugin
 
 from .ImageParser import imageparser
 
-MARKDOWN_VIEW_INFOS = "markdown_view_infos"
+MD_VIEW_INFO = "md_view_info"
 SETTING_DELAY_BETWEEN_UPDATES = "delay_between_updates"
 PREVIEW_VIEWS = dict()
 
@@ -88,12 +88,27 @@ class MdlpEraseCommand(sublime_plugin.TextCommand):
         self.view.erase(edit, region)
 
 
+class MarkdownLivePreviewBaseCommand:
+    # we schedule an update for every key stroke, with a delay of DELAY
+    # then, we update only if now() - last_update > DELAY
+    last_update = int()
+
+    # Desc: Unicode Checkboxes
+    # - Provide unicode characters to replace checkboxes
+    def render_checkboxes(self, content: str):
+        if SETTINGS.get("render_checkboxes", True):
+            return content.replace("- [ ]", "&nbsp;&#9744;").replace(
+                "- [x]", "&nbsp;&#9745;"
+            )
+        return content
+
+
 class OpenMarkdownPreviewCommand(sublime_plugin.TextCommand):
     def run(self, edit):
         global preview_view, PREVIEW_VIEWS
-        """ Description: If the file is saved exists on disk, we close it, 
-        - and reopen it in a new window. Otherwise, we copy the content, 
-        - erase it all (to close the file without a dialog) 
+        """ Description: If the file is saved exists on disk, we close it,
+        - and reopen it in a new window. Otherwise, we copy the content,
+        - erase it all (to close the file without a dialog)
         - and re-insert it into a new view into a new window """
 
         original_view = self.view
@@ -139,58 +154,58 @@ class OpenMarkdownPreviewCommand(sublime_plugin.TextCommand):
 
         markdown_view.set_syntax_file(syntax_file)
         markdown_view.settings().set(
-            MARKDOWN_VIEW_INFOS, {"original_window_id": original_window_id,},
+            MD_VIEW_INFO, {"original_window_id": original_window_id,},
         )
         PREVIEW_VIEWS[markdown_view.id()] = preview_view.id()
 
     def is_enabled(self):
-        # FIXME: is this the best way there is to check if the current syntax is markdown?
-        #        should we only support default markdown?
-        #        what about "md"?
-        # FIXME: what about other languages, where markdown preview roughly works?
-        return "markdown" in self.view.settings().get("syntax").lower()
+        as_markdown = SETTINGS.get("syntax", ["Markdown"])
+        if any(syntax in self.view.settings().get("syntax") for syntax in as_markdown):
+            return True
 
 
-class MarkdownLivePreviewListener(sublime_plugin.EventListener):
-    # we schedule an update for every key stroke, with a delay of DELAY
-    # then, we update only if now() - last_update > DELAY
-    last_update = 0
+class MarkdownLivePreviewListener(
+    MarkdownLivePreviewBaseCommand, sublime_plugin.EventListener
+):
 
     # FIXME: maybe we shouldn't restore the file in the original window...
-
-    def on_pre_close(self, markdown_view):
-        """ Close the view in the preview window, and store information for the on_close
+    def on_pre_close(self, view):
+        """
+        Close the view in the preview window,
+        and store information for the on_close
         listener (see doc there)
         """
-        if not markdown_view.settings().get(MARKDOWN_VIEW_INFOS):
+        if not view.settings().get(MD_VIEW_INFO):
             return
 
-        self.markdown_view = markdown_view
-        self.preview_window = markdown_view.window()
-        self.file_name = markdown_view.file_name()
+        self.markdown_view = view
+        self.preview_window = view.window()
+        self.file_name = view.file_name()
 
         if self.file_name is None:
-            total_region = sublime.Region(0, markdown_view.size())
-            self.content = markdown_view.substr(total_region)
-            markdown_view.run_command("mdlp_erase")
+            total_region = sublime.Region(0, view.size())
+            self.content = view.substr(total_region)
+            view.run_command("mdlp_erase")
         else:
             self.content = None
 
-    def on_load_async(self, markdown_view):
-        infos = markdown_view.settings().get(MARKDOWN_VIEW_INFOS)
+    def on_load_async(self, view):
+        infos = view.settings().get(MD_VIEW_INFO)
         if not infos:
             return
-        self._update_preview(markdown_view)
+        self._update_preview(view)
 
-    def on_close(self, markdown_view):
-        """ Use the information saved to restore the markdown_view as an original_view
+    def on_close(self, view):
         """
-        infos = markdown_view.settings().get(MARKDOWN_VIEW_INFOS)
+        Use the information saved to restore the view
+        as an original_view
+        """
+        infos = view.settings().get(MD_VIEW_INFO)
         if not infos:
             return
 
         assert (
-            markdown_view.id() == self.markdown_view.id()
+            view.id() == self.markdown_view.id()
         ), "pre_close view.id() != close view.id()"
         self.preview_window.run_command("close_window")
 
@@ -203,87 +218,75 @@ class MarkdownLivePreviewListener(sublime_plugin.EventListener):
         if self.file_name:
             original_window.open_file(self.file_name)
         else:
-            assert markdown_view.is_scratch(), (
+            assert view.is_scratch(), (
                 "markdown view of an unsaved file should " "be a scratch"
             )
-            # note here that this is called original_view, because it's what semantically
-            # makes sense, but this original_view.id() will be different than the one
-            # that we closed first to reopen in the preview window
-            # shouldn't cause any trouble though
+            # note here that this is called original_view, because it's what
+            # semantically makes sense, but this original_view.id() will be
+            # different than the one that we closed first to reopen in
+            # the preview window shouldn't cause any
+            # trouble though
             original_view = original_window.new_file()
             original_view.run_command(
                 "mdlp_insert", {"point": 0, "string": self.content}
             )
 
-            original_view.set_syntax_file(markdown_view.settings().get("syntax"))
+            original_view.set_syntax_file(view.settings().get("syntax"))
         global PREVIEW_VIEWS
-        del PREVIEW_VIEWS[markdown_view.id()]
+        del PREVIEW_VIEWS[view.id()]
 
     # here, views are NOT treated independently, which is theoretically wrong
-    # but in practice, you can only edit one markdown file at a time, so it doesn't really
-    # matter.
+    # but in practice, you can only edit one markdown file at a time,
+    # so it doesn't really matter.
     # @min_time_between_call(.5)
-    def on_modified_async(self, markdown_view):
-        if not markdown_view.settings().get(MARKDOWN_VIEW_INFOS):
+    def on_modified_async(self, view):
+        if not view.settings().get(MD_VIEW_INFO):
             return
 
         # we schedule an update, which won't run if an
-        sublime.set_timeout(partial(self._update_preview, markdown_view), DELAY)
+        sublime.set_timeout(partial(self._update_preview, view), DELAY)
 
-    def _update_preview(self, markdown_view):
-        # if the buffer id is 0, that means that the markdown_view has been closed
-        # This check is needed since a this function is used as a callback for when images
-        # are loaded from the internet (ie. it could finish loading *after* the user
-        # closes the markdown_view)
+    def _update_preview(self, view):
+        # if the buffer id is 0, that means that the view has been
+        # closed This check is needed since a this function is used as a
+        # callback for when images are loaded from the internet (ie. it could
+        # finish loading *after* the user closes the view)
         if time.time() - self.last_update < DELAY / 1000:
             return
 
         # Desc: Check if View is in Previews
-        if markdown_view.id() not in PREVIEW_VIEWS.keys():
+        if view.id() not in PREVIEW_VIEWS.keys():
             return
 
         preview_view = None
-        for view in sublime.active_window().sheets():
-            if view.id() == PREVIEW_VIEWS[markdown_view.id()]:
-                preview_view = view
+        for enum_view in sublime.active_window().sheets():
+            if enum_view.id() == PREVIEW_VIEWS[view.id()]:
+                preview_view = enum_view
                 break
 
         # Desc: If Preview is None, we can't update
         if preview_view is None:
             return
 
-        if markdown_view.buffer_id() == 0:
+        if view.buffer_id() == 0:
             return
 
         self.last_update = time.time()
 
-        total_region = sublime.Region(0, markdown_view.size())
-        markdown_content = "{}\n\n{}".format(
+        total_region = sublime.Region(0, view.size())
+        content = "{}\n\n{}".format(
             mdpopups.format_frontmatter(frontmatter),
-            self.render_checkboxes(markdown_view.substr(total_region)),
+            self.render_checkboxes(view.substr(total_region)),
         )
-        html_content = mdpopups.md2html(markdown_view, markdown_content).replace(
-            "<br>", "<br/>"
-        )
+        html_content = mdpopups.md2html(view, content).replace("<br>", "<br/>")
 
-        file_name = markdown_view.file_name()
-
-        basepath = os.path.dirname(file_name) if file_name is not None else None
+        file_name = view.file_name()
+        basepath = os.path.dirname(file_name) if file_name else None
         html_content = imageparser(
-            html_content,
-            basepath,
-            partial(self._update_preview, markdown_view),
-            resources,
+            html_content, basepath, partial(self._update_preview, view), resources,
         )
 
         mdpopups.update_html_sheet(preview_view, html_content, md=False)
-
-    def render_checkboxes(self, content: str):
-        if SETTINGS.get("render_checkboxes", False):
-            return content.replace("- [ ]", "&nbsp;&#9744;").replace(
-                "- [x]", "&nbsp;&#9745;"
-            )
-        return content
 
 
 def get_settings():

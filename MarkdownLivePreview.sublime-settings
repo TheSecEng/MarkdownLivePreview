@@ -1,4 +1,6 @@
 {
 	// minimum number of milliseconds to wait before updating the preview again
-	"delay_between_updates": 100
+	"delay_between_updates": 100,
+	// Array for syntaxes that this should be enabled on
+	"syntax": ["Markdown", "MultiMarkdown"]
 }
