@@ -20,8 +20,34 @@ from .ImageParser import imageparser
 
 MARKDOWN_VIEW_INFOS = "markdown_view_infos"
 SETTING_DELAY_BETWEEN_UPDATES = "delay_between_updates"
+PREVIEW_VIEWS = dict()
 
 resources = {}
+
+frontmatter = {
+    "allow_code_wrap": False,
+    "markdown_extensions": [
+        "markdown.extensions.admonition",
+        "markdown.extensions.attr_list",
+        "markdown.extensions.def_list",
+        "markdown.extensions.nl2br",
+        {"markdown.extensions.smarty": {"smart_quotes": False}},
+        "pymdownx.betterem",
+        {
+            "pymdownx.magiclink": {
+                "repo_url_shortener": True,
+                "base_repo_url": "https://github.com/facelessuser/sublime-markdown-popups",
+            }
+        },
+        "pymdownx.extrarawhtml",
+        "pymdownx.keys",
+        {"pymdownx.escapeall": {"hardbreak": True, "nbsp": True}},
+        {"pymdownx.smartsymbols": {"ordinal_numbers": False}},
+        "pymdownx.striphtml",
+        # "pymdownx.tasklist",
+        "pymdownx.b64",
+    ],
+}
 
 
 def plugin_loaded():
@@ -64,7 +90,7 @@ class MdlpEraseCommand(sublime_plugin.TextCommand):
 
 class OpenMarkdownPreviewCommand(sublime_plugin.TextCommand):
     def run(self, edit):
-        global preview_view
+        global preview_view, PREVIEW_VIEWS
         """ Description: If the file is saved exists on disk, we close it, 
         - and reopen it in a new window. Otherwise, we copy the content, 
         - erase it all (to close the file without a dialog) 
@@ -100,6 +126,7 @@ class OpenMarkdownPreviewCommand(sublime_plugin.TextCommand):
         )
 
         preview_window.focus_group(1)
+
         preview_view = mdpopups.new_html_sheet(preview_window, "Preview", "")
 
         preview_window.focus_group(0)
@@ -114,6 +141,7 @@ class OpenMarkdownPreviewCommand(sublime_plugin.TextCommand):
         markdown_view.settings().set(
             MARKDOWN_VIEW_INFOS, {"original_window_id": original_window_id,},
         )
+        PREVIEW_VIEWS[markdown_view.id()] = preview_view.id()
 
     def is_enabled(self):
         # FIXME: is this the best way there is to check if the current syntax is markdown?
@@ -188,8 +216,8 @@ class MarkdownLivePreviewListener(sublime_plugin.EventListener):
             )
 
             original_view.set_syntax_file(markdown_view.settings().get("syntax"))
-        global preview_view
-        preview_view = None
+        global PREVIEW_VIEWS
+        del PREVIEW_VIEWS[markdown_view.id()]
 
     # here, views are NOT treated independently, which is theoretically wrong
     # but in practice, you can only edit one markdown file at a time, so it doesn't really
@@ -210,31 +238,51 @@ class MarkdownLivePreviewListener(sublime_plugin.EventListener):
         if time.time() - self.last_update < DELAY / 1000:
             return
 
+        # Desc: Check if View is in Previews
+        if markdown_view.id() not in PREVIEW_VIEWS.keys():
+            return
+
+        preview_view = None
+        for view in sublime.active_window().sheets():
+            if view.id() == PREVIEW_VIEWS[markdown_view.id()]:
+                preview_view = view
+                break
+
+        # Desc: If Preview is None, we can't update
+        if preview_view is None:
+            return
+
         if markdown_view.buffer_id() == 0:
             return
 
         self.last_update = time.time()
 
         total_region = sublime.Region(0, markdown_view.size())
-        markdown_content = self.render_checkbox(markdown_view.substr(total_region))
-
-        html_content = mdpopups.md2html(
-            markdown_view, markdown_content
+        markdown_content = "{}\n\n{}".format(
+            mdpopups.format_frontmatter(frontmatter),
+            self.render_checkboxes(markdown_view.substr(total_region)),
+        )
+        html_content = mdpopups.md2html(markdown_view, markdown_content).replace(
+            "<br>", "<br/>"
         )
 
-        basepath = os.path.dirname(markdown_view.file_name())
+        file_name = markdown_view.file_name()
+
+        basepath = os.path.dirname(file_name) if file_name is not None else None
         html_content = imageparser(
             html_content,
             basepath,
             partial(self._update_preview, markdown_view),
             resources,
         )
-        global preview_view
+
         mdpopups.update_html_sheet(preview_view, html_content, md=False)
 
-    def render_checkbox(self, content: str):
-        if SETTINGS.get("render_checkboxes", True):
-            return content.replace("- [ ]", "&nbsp;&#9744;").replace("- [x]", "&nbsp;&#9745;")
+    def render_checkboxes(self, content: str):
+        if SETTINGS.get("render_checkboxes", False):
+            return content.replace("- [ ]", "&nbsp;&#9744;").replace(
+                "- [x]", "&nbsp;&#9745;"
+            )
         return content
 
 

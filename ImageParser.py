@@ -21,6 +21,7 @@ def _remove_entities(text):
 
     import html.parser
     html = html.parser.HTMLParser()
+    text = text.replace("<br/>", "<br>").replace("<hr/>", "<hr />")
 
     def repl(m):
         """Replace entities except &, <, >, and `nbsp`."""
@@ -43,23 +44,15 @@ def imageparser(html, basepath, re_render, resources):
         elif src.startswith("file://"):
             path = src[len("file://") :]
         else:
-            # expanduser: ~ -> /home/math2001
-            # realpath: simplify that paths so that we don't have duplicated caches
+            if basepath is None:
+                basepath = "."
             path = os.path.realpath(os.path.expanduser(os.path.join(basepath, src)))
 
         base64 = get_base64_image(path, re_render, resources)
 
         img_element["src"] = base64
 
-    return _remove_entities(re.sub(
-            "(<!--.*?-->)",
-            "",
-            "{}".format(soup)
-            .replace("<br/>", "<br />")
-            .replace("</br>", "<br>")
-            .replace("<hr/>", "<hr />"),
-            flags=re.DOTALL,
-        ))
+    return _remove_entities(soup.prettify(formatter="html"))
 
 
 images_cache = {}
