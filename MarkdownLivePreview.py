@@ -15,8 +15,10 @@ from functools import partial
 import mdpopups
 import sublime
 import sublime_plugin
+from mdpopups import frontmatter
 
 from .ImageParser import imageparser
+
 
 MD_VIEW_INFO = "md_view_info"
 SETTING_DELAY_BETWEEN_UPDATES = "delay_between_updates"
@@ -24,7 +26,7 @@ PREVIEW_VIEWS = dict()
 
 resources = {}
 
-frontmatter = {
+MD_FM = {
     "allow_code_wrap": False,
     "markdown_extensions": [
         "markdown.extensions.admonition",
@@ -32,13 +34,6 @@ frontmatter = {
         "markdown.extensions.def_list",
         "markdown.extensions.nl2br",
         {"markdown.extensions.smarty": {"smart_quotes": False}},
-        "pymdownx.betterem",
-        {
-            "pymdownx.magiclink": {
-                "repo_url_shortener": True,
-                "base_repo_url": "https://github.com/facelessuser/sublime-markdown-popups",
-            }
-        },
         "pymdownx.extrarawhtml",
         "pymdownx.keys",
         {"pymdownx.escapeall": {"hardbreak": True, "nbsp": True}},
@@ -52,7 +47,8 @@ frontmatter = {
 
 def plugin_loaded():
     global DELAY, SETTINGS
-    resources["base64_404_image"] = parse_image_resource(get_resource("404.base64"))
+    resources["base64_404_image"] = parse_image_resource(
+        get_resource("404.base64"))
     resources["base64_loading_image"] = parse_image_resource(
         get_resource("loading.base64")
     )
@@ -78,8 +74,8 @@ def update_delay():
 
 
 class MdlpInsertCommand(sublime_plugin.TextCommand):
-    def run(self, edit, point, string):
-        self.view.insert(edit, point, string)
+    def run(self, edit, point, content):
+        self.view.insert(edit, point, content)
 
 
 class MdlpEraseCommand(sublime_plugin.TextCommand):
@@ -92,6 +88,44 @@ class MarkdownLivePreviewBaseCommand:
     # we schedule an update for every key stroke, with a delay of DELAY
     # then, we update only if now() - last_update > DELAY
     last_update = int()
+
+    def _skip_update(self):
+        if time.time() - self.last_update < DELAY / 1000:
+            self.last_update = time.time()
+            return True
+        return False
+
+    def _preview_from_markdown(self, view):
+        # Desc: Check if View is in Previews
+        if view.id() not in PREVIEW_VIEWS.keys():
+            return None
+
+        if view.buffer_id() == 0:
+            return None
+
+        for enum_view in sublime.active_window().sheets():
+            if enum_view.id() == PREVIEW_VIEWS[view.id()]:
+                return enum_view
+
+        return None
+
+    def generate_content(self, view):
+        total_region = sublime.Region(0, view.size())
+        fm, content = frontmatter.get_frontmatter(view.substr(total_region))
+        MD_FM.update(fm)
+        content = "{}\n\n{}".format(
+            mdpopups.format_frontmatter(
+                MD_FM), self.render_checkboxes(content),
+        )
+        html_content = mdpopups.md2html(view, content).replace("<br>", "<br/>")
+
+        file_name = view.file_name()
+        basepath = os.path.dirname(file_name) if file_name else None
+        html_content = imageparser(
+            html_content, basepath, partial(
+                self._update_preview, view), resources,
+        )
+        return html_content
 
     # Desc: Unicode Checkboxes
     # - Provide unicode characters to replace checkboxes
@@ -126,7 +160,7 @@ class OpenMarkdownPreviewCommand(sublime_plugin.TextCommand):
             original_view.erase(edit, total_region)
             original_view.close()
             # FIXME: save the document to a temporary file, so that if we crash,
-            #        the user doesn't lose what he wrote
+            # - the user doesn't lose what he wrote
 
         sublime.run_command("new_window")
         preview_window = sublime.active_window()
@@ -141,27 +175,31 @@ class OpenMarkdownPreviewCommand(sublime_plugin.TextCommand):
         )
 
         preview_window.focus_group(1)
-
-        preview_view = mdpopups.new_html_sheet(preview_window, "Preview", "")
+        preview_view = mdpopups.new_html_sheet(
+            window=preview_window,
+            name="Preview",
+            contents="")
 
         preview_window.focus_group(0)
         if file_name:
             markdown_view = preview_window.open_file(file_name)
         else:
             markdown_view = preview_window.new_file()
-            markdown_view.run_command("mdlp_insert", {"point": 0, "string": content})
+            markdown_view.run_command(
+                "mdlp_insert", {"point": 0, "content": content})
             markdown_view.set_scratch(True)
 
         markdown_view.set_syntax_file(syntax_file)
         markdown_view.settings().set(
-            MD_VIEW_INFO, {"original_window_id": original_window_id,},
+            MD_VIEW_INFO, {"original_window_id": original_window_id, },
         )
         PREVIEW_VIEWS[markdown_view.id()] = preview_view.id()
 
     def is_enabled(self):
         as_markdown = SETTINGS.get("syntax", ["Markdown"])
-        if any(syntax in self.view.settings().get("syntax") for syntax in as_markdown):
-            return True
+        return any(
+            syntax in self.view.settings().get("syntax") for syntax in as_markdown
+        )
 
 
 class MarkdownLivePreviewListener(
@@ -228,12 +266,13 @@ class MarkdownLivePreviewListener(
             # trouble though
             original_view = original_window.new_file()
             original_view.run_command(
-                "mdlp_insert", {"point": 0, "string": self.content}
+                "mdlp_insert", {"point": 0, "content": self.content}
             )
 
             original_view.set_syntax_file(view.settings().get("syntax"))
         global PREVIEW_VIEWS
-        del PREVIEW_VIEWS[view.id()]
+        if view.id() in PREVIEW_VIEWS.keys():
+            del PREVIEW_VIEWS[view.id()]
 
     # here, views are NOT treated independently, which is theoretically wrong
     # but in practice, you can only edit one markdown file at a time,
@@ -251,42 +290,17 @@ class MarkdownLivePreviewListener(
         # closed This check is needed since a this function is used as a
         # callback for when images are loaded from the internet (ie. it could
         # finish loading *after* the user closes the view)
-        if time.time() - self.last_update < DELAY / 1000:
+        if self._skip_update():
             return
 
-        # Desc: Check if View is in Previews
-        if view.id() not in PREVIEW_VIEWS.keys():
-            return
-
-        preview_view = None
-        for enum_view in sublime.active_window().sheets():
-            if enum_view.id() == PREVIEW_VIEWS[view.id()]:
-                preview_view = enum_view
-                break
-
-        # Desc: If Preview is None, we can't update
+        preview_view = self._preview_from_markdown(view)
         if preview_view is None:
             return
 
-        if view.buffer_id() == 0:
-            return
-
-        self.last_update = time.time()
-
-        total_region = sublime.Region(0, view.size())
-        content = "{}\n\n{}".format(
-            mdpopups.format_frontmatter(frontmatter),
-            self.render_checkboxes(view.substr(total_region)),
-        )
-        html_content = mdpopups.md2html(view, content).replace("<br>", "<br/>")
-
-        file_name = view.file_name()
-        basepath = os.path.dirname(file_name) if file_name else None
-        html_content = imageparser(
-            html_content, basepath, partial(self._update_preview, view), resources,
-        )
-
-        mdpopups.update_html_sheet(preview_view, html_content, md=False)
+        mdpopups.update_html_sheet(
+           sheet=preview_view,
+           contents=self.generate_content(view),
+           md=False)
 
 
 def get_settings():
