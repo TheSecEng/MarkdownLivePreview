@@ -19,7 +19,6 @@ from mdpopups import frontmatter
 
 from .ImageParser import imageparser
 
-
 MD_VIEW_INFO = "md_view_info"
 SETTING_DELAY_BETWEEN_UPDATES = "delay_between_updates"
 PREVIEW_VIEWS = dict()
@@ -39,7 +38,6 @@ MD_FM = {
         {"pymdownx.escapeall": {"hardbreak": True, "nbsp": True}},
         {"pymdownx.smartsymbols": {"ordinal_numbers": False}},
         "pymdownx.striphtml",
-        # "pymdownx.tasklist",
         "pymdownx.b64",
     ],
 }
