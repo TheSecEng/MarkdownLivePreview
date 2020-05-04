@@ -46,11 +46,15 @@ def imageparser(html, basepath, re_render, resources):
         if src.startswith("http://") or src.startswith("https://"):
             path = src
         elif src.startswith("file://"):
-            path = src[len("file://") :]
+            path = src[len("file://"):]
         else:
             if basepath is None:
                 basepath = "."
-            path = os.path.realpath(os.path.expanduser(os.path.join(basepath, src)))
+            path = os.path.realpath(
+                os.path.expanduser(
+                    os.path.join(basepath, src)
+                    )
+                )
 
         base64 = get_base64_image(path, re_render, resources)
 
