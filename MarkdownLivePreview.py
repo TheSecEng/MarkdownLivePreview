@@ -85,15 +85,15 @@ class MdlpEraseCommand(sublime_plugin.TextCommand):
 
 
 class MarkdownLivePreviewBaseCommand:
-    # we schedule an update for every key stroke, with a delay of DELAY
-    # then, we update only if now() - last_update > DELAY
-    last_update = int()
+    last_update = float()
 
+    # & Only update if the time between updates
+    # - is greater than our delay.
     def _skip_update(self):
-        if time.time() - self.last_update < DELAY / 1000:
+        if time.time() - self.last_update > DELAY / 1000:
             self.last_update = time.time()
-            return True
-        return False
+            return False
+        return True
 
     def _preview_from_markdown(self, view):
         # Desc: Check if View is in Previews
