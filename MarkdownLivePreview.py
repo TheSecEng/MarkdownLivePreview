@@ -125,13 +125,18 @@ class MarkdownLivePreviewBaseCommand:
         )
         return html_content
 
-    # Desc: Unicode Checkboxes
+    # & Unicode Checkboxes
     # - Provide unicode characters to replace checkboxes
     def render_checkboxes(self, content: str):
-        if SETTINGS.get("render_checkboxes", True):
-            return content.replace("- [ ]", "&nbsp;&#9744;").replace(
-                "- [x]", "&nbsp;&#9745;"
-            )
+        if SETTINGS.get("render_checkboxes", False):
+            font_size = SETTINGS.get("render_checkboxes_font_size", 16)
+            return content.replace(
+                "- [ ]",
+                "<big style='font-size: {}px;'>&nbsp;&#9744;</big>".format(font_size)
+                ).replace(
+                    "- [x]",
+                    "<big style='font-size: {}px;'>&nbsp;&#9745;</big>".format(font_size)
+                )
         return content
 
 

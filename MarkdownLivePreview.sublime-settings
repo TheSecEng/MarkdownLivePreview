@@ -1,6 +1,10 @@
 {
 	// minimum number of milliseconds to wait before updating the preview again
 	"delay_between_updates": 100,
-	// Array for syntaxes that this should be enabled on
-	"syntax": ["Markdown", "MultiMarkdown"]
+	// Array for syntax's that this should be enabled on
+	"syntax": ["Markdown", "MultiMarkdown"],
+	// Replaces "- [ ]" → "☐" and "- [x]" → "☑" in the preview
+	"render_checkboxes": true,
+	// Render size of the check boxes
+	"render_checkboxes_font_size": 16
 }
