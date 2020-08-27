@@ -113,7 +113,7 @@ class MarkdownLivePreviewBaseCommand:
         MD_FM.update(fm)
         content = "{}\n\n{}".format(
             mdpopups.format_frontmatter(
-                MD_FM), self.render_checkboxes(content),
+                MD_FM), content,
         )
         html_content = mdpopups.md2html(view, content).replace("<br>", "<br/>")
 
@@ -124,20 +124,6 @@ class MarkdownLivePreviewBaseCommand:
                 self._update_preview, view), resources,
         )
         return html_content
-
-    # & Unicode Checkboxes
-    # - Provide unicode characters to replace checkboxes
-    def render_checkboxes(self, content: str):
-        if SETTINGS.get("render_checkboxes", False):
-            font_size = SETTINGS.get("render_checkboxes_font_size", 16)
-            return content.replace(
-                "- [ ]",
-                "<big style='font-size: {}px;'>&nbsp;&#9744;</big>".format(font_size)
-                ).replace(
-                    "- [x]",
-                    "<big style='font-size: {}px;'>&nbsp;&#9745;</big>".format(font_size)
-                )
-        return content
 
 
 class OpenMarkdownPreviewCommand(sublime_plugin.TextCommand):

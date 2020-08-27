@@ -86,7 +86,6 @@ def get_base64_image(path, re_render, resources):
             images_cache[path] = future.result()
         except urllib.error.HTTPError as e:
             images_cache[path] = resources["base64_404_image"]
-            print("Error loading {!r}: {!r}".format(path, e))
 
         images_loading.remove(path)
 
